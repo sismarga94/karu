@@ -342,21 +342,20 @@ async function exportPDF() {
   btn.disabled = true;
   btn.textContent = '⏳ Generating…';
 
-  // Show loading overlay
-  const overlay = document.createElement('div');
-  overlay.className = 'pdf-overlay';
-  overlay.innerHTML = '<div class="pdf-overlay-spinner"></div><span>Generating PDF…</span>';
-  document.body.appendChild(overlay);
-
-  // Hide UI chrome from the capture
+  // Hide UI chrome from the capture (FAB, toggles, etc.)
   document.body.classList.add('pdf-capturing');
 
   // Also temporarily show any hidden sections so they appear in the PDF
   const hiddenBodies = document.querySelectorAll('.section-body-hidden');
   hiddenBodies.forEach(el => el.classList.remove('section-body-hidden'));
 
-  // Small delay so CSS repaints before canvas capture
+  // Wait for CSS repaint before snapshot
   await new Promise(r => setTimeout(r, 120));
+
+  // Show loading overlay AFTER the repaint delay so html2canvas won't see it
+  const overlay = document.createElement('div');
+  overlay.className = 'pdf-overlay';
+  overlay.innerHTML = '<div class="pdf-overlay-spinner"></div><span>Generating PDF…</span>';
 
   try {
     const { jsPDF } = window.jspdf;
@@ -365,6 +364,9 @@ async function exportPDF() {
     const PDF_W = 210;
     const PDF_H = 297;
     const MARGIN = 10; // mm
+
+    // Mount overlay now — after the snapshot target is already frozen in memory
+    document.body.appendChild(overlay);
 
     const canvas = await html2canvas(document.body, {
       scale: 2,
@@ -375,6 +377,7 @@ async function exportPDF() {
       scrollY: 0,
       windowWidth: document.body.scrollWidth,
       windowHeight: document.body.scrollHeight,
+      ignoreElements: el => el === overlay,   // belt-and-suspenders: skip overlay
     });
 
     const imgData   = canvas.toDataURL('image/jpeg', 0.92);

@@ -279,13 +279,158 @@ function initGalleryUpload() {
   });
 }
 
+// ─── Section Show/Hide toggles ───────────────────────────────────────────────
+const SECTION_VISIBILITY_KEY = 'sectionVisibility';
+
+function getSectionVisibility() {
+  try { return JSON.parse(localStorage.getItem(SECTION_VISIBILITY_KEY)) || {}; } catch { return {}; }
+}
+function saveSectionVisibility(map) {
+  localStorage.setItem(SECTION_VISIBILITY_KEY, JSON.stringify(map));
+}
+
+/**
+ * Each toggle button carries data-target="<section-id>".
+ * Hiding collapses everything inside the section EXCEPT the header row,
+ * so the toggle button itself stays reachable.
+ */
+function applySectionVisibility(sectionId, visible) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  // Hide every direct child that is NOT the header row
+  Array.from(section.children).forEach(child => {
+    const isHeader = child.classList.contains('catalog-header') ||
+                     child.classList.contains('gallery-header');
+    if (!isHeader) child.classList.toggle('section-body-hidden', !visible);
+  });
+  // Update the toggle button appearance
+  const btn = section.querySelector('.section-toggle');
+  if (btn) {
+    btn.classList.toggle('is-hidden', !visible);
+    btn.title = visible ? `Hide ${btn.dataset.label || 'section'}` : `Show ${btn.dataset.label || 'section'}`;
+    btn.textContent = visible ? '👁' : '👁‍🗨';
+  }
+}
+
+function initSectionToggles() {
+  const visibility = getSectionVisibility();
+  document.querySelectorAll('.section-toggle').forEach(btn => {
+    const targetId = btn.dataset.target;
+    const label    = document.getElementById(targetId)?.querySelector('h2')?.textContent || targetId;
+    btn.dataset.label = label;
+
+    // Restore persisted state (default = visible)
+    const isVisible = visibility[targetId] !== false;
+    applySectionVisibility(targetId, isVisible);
+
+    btn.addEventListener('click', () => {
+      const map = getSectionVisibility();
+      const nowVisible = map[targetId] === false; // toggling: was hidden → now show
+      map[targetId] = nowVisible;
+      saveSectionVisibility(map);
+      applySectionVisibility(targetId, nowVisible);
+    });
+  });
+}
+
+// ─── PDF Export ──────────────────────────────────────────────────────────────
+async function exportPDF() {
+  const btn = document.getElementById('pdf-export-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating…';
+
+  // Show loading overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'pdf-overlay';
+  overlay.innerHTML = '<div class="pdf-overlay-spinner"></div><span>Generating PDF…</span>';
+  document.body.appendChild(overlay);
+
+  // Hide UI chrome from the capture
+  document.body.classList.add('pdf-capturing');
+
+  // Also temporarily show any hidden sections so they appear in the PDF
+  const hiddenBodies = document.querySelectorAll('.section-body-hidden');
+  hiddenBodies.forEach(el => el.classList.remove('section-body-hidden'));
+
+  // Small delay so CSS repaints before canvas capture
+  await new Promise(r => setTimeout(r, 120));
+
+  try {
+    const { jsPDF } = window.jspdf;
+
+    // A4 dimensions in mm
+    const PDF_W = 210;
+    const PDF_H = 297;
+    const MARGIN = 10; // mm
+
+    const canvas = await html2canvas(document.body, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#faf7f2',
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: document.body.scrollWidth,
+      windowHeight: document.body.scrollHeight,
+    });
+
+    const imgData   = canvas.toDataURL('image/jpeg', 0.92);
+    const imgW      = PDF_W - MARGIN * 2;          // usable width in mm
+    const imgH      = (canvas.height / canvas.width) * imgW; // proportional height
+
+    const pdf       = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageUsable = PDF_H - MARGIN * 2;
+
+    let yOffset = 0;
+    while (yOffset < imgH) {
+      if (yOffset > 0) pdf.addPage();
+      pdf.addImage(
+        imgData, 'JPEG',
+        MARGIN,                          // x
+        MARGIN - yOffset,                // y (shifts up each page)
+        imgW, imgH,                      // width, full height
+        undefined, 'FAST'
+      );
+      // Clip the visible area with a white mask outside page bounds
+      // top mask
+      pdf.setFillColor(250, 247, 242);
+      pdf.rect(0, 0, PDF_W, MARGIN, 'F');
+      // bottom mask
+      pdf.rect(0, MARGIN + pageUsable, PDF_W, MARGIN, 'F');
+      yOffset += pageUsable;
+    }
+
+    const name = (localStorage.getItem('roasteryName') || 'Roastery-Profile')
+      .replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
+    pdf.save(`${name}.pdf`);
+    showToast('PDF saved!');
+  } catch (err) {
+    showToast(`PDF failed: ${err.message}`);
+    console.error(err);
+  } finally {
+    // Restore hidden sections
+    const map = getSectionVisibility();
+    document.querySelectorAll('.section-toggle').forEach(btn => {
+      const targetId = btn.dataset.target;
+      if (map[targetId] === false) applySectionVisibility(targetId, false);
+    });
+
+    document.body.classList.remove('pdf-capturing');
+    overlay.remove();
+    btn.disabled = false;
+    btn.textContent = '⬇ PDF';
+  }
+}
+
 // ─── Boot ────────────────────────────────────────────────────────────────────
 async function init() {
   loadTextFields();
   await Promise.all([initHeroImage(), initLogoImage(), loadGallery()]);
   initGalleryUpload();
+  initSectionToggles();
 
   document.getElementById('edit-toggle').addEventListener('click', () => setEditMode(!editMode));
+  document.getElementById('pdf-export-btn').addEventListener('click', exportPDF);
 
   // Prevent accidental navigation when editing text
   document.querySelectorAll('.editable').forEach(el => {

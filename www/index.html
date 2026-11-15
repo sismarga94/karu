@@ -70,6 +70,7 @@
       <div class="catalog-actions">
         <button id="sync-btn" class="btn btn-secondary edit-only hidden">⟳ Sync Menu</button>
         <button id="sheets-config-btn" class="btn btn-ghost edit-only hidden">⚙ Sheet URL</button>
+        <button id="catalog-toggle-btn" class="btn btn-ghost section-toggle" data-target="catalog-section" title="Show/Hide Coffee Menu">👁</button>
       </div>
     </div>
     <div id="catalog-grid" class="catalog-grid">
@@ -82,8 +83,11 @@
   <section class="gallery-section" id="gallery-section">
     <div class="gallery-header">
       <h2>Gallery</h2>
-      <label class="btn btn-secondary edit-only hidden" for="gallery-add-input">+ Add Photo</label>
-      <input type="file" id="gallery-add-input" accept="image/*" multiple class="hidden" />
+      <div class="gallery-header-actions">
+        <label class="btn btn-secondary edit-only hidden" for="gallery-add-input">+ Add Photo</label>
+        <input type="file" id="gallery-add-input" accept="image/*" multiple class="hidden" />
+        <button id="gallery-toggle-btn" class="btn btn-ghost section-toggle" data-target="gallery-section" title="Show/Hide Gallery">👁</button>
+      </div>
     </div>
     <div id="gallery-grid" class="gallery-grid">
       <!-- Items injected by app.js -->
@@ -92,6 +96,9 @@
 
   <!-- ═══════════════════════════ EDIT TOGGLE ═══════════════════════════ -->
   <button id="edit-toggle" class="edit-toggle" title="Toggle Edit Mode">✏</button>
+
+  <!-- ══════════════════════════ EXPORT PDF BUTTON ═══════════════════════ -->
+  <button id="pdf-export-btn" class="pdf-export-btn" title="Export as PDF">⬇ PDF</button>
 
   <!-- ══════════════════════════ SHEETS CONFIG MODAL ════════════════════ -->
   <div id="sheets-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Google Sheets configuration">
@@ -112,6 +119,10 @@
 
   <!-- ═══════════════════════════════ TOAST ════════════════════════════ -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- PDF libs (loaded before app modules) -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/@capacitor/core@latest/dist/capacitor.js"></script>
   <script type="module" src="app.js"></script>

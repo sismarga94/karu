@@ -209,6 +209,7 @@ input, textarea { font-family: inherit; }
   margin-bottom: 1rem;
 }
 .gallery-header h2 { font-size: 1.25rem; }
+.gallery-header-actions { display: flex; align-items: center; gap: .4rem; }
 
 .gallery-grid {
   display: grid;
@@ -252,6 +253,19 @@ input, textarea { font-family: inherit; }
 }
 
 /* ─────────────────────────────────────────────────────────────
+   SECTION SHOW/HIDE TOGGLE BUTTON
+───────────────────────────────────────────────────────────── */
+.section-toggle {
+  font-size: .85rem; padding: .35rem .7rem;
+  opacity: .65; transition: opacity var(--transition);
+}
+.section-toggle:hover { opacity: 1; }
+.section-toggle.is-hidden { opacity: 1; color: var(--clr-caramel); }
+
+/* collapsed body of a section (header stays visible) */
+.section-body-hidden { display: none !important; }
+
+/* ─────────────────────────────────────────────────────────────
    EDIT TOGGLE FAB
 ───────────────────────────────────────────────────────────── */
 .edit-toggle {
@@ -268,6 +282,29 @@ input, textarea { font-family: inherit; }
   background: var(--clr-edit);
   transform: rotate(15deg);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   PDF EXPORT FAB
+───────────────────────────────────────────────────────────── */
+.pdf-export-btn {
+  position: fixed; bottom: 1.5rem; left: 1.5rem;
+  height: 44px; padding: 0 1.1rem; border-radius: 100px;
+  background: var(--clr-caramel); color: #fff;
+  border: none; font-size: .88rem; font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28);
+  display: flex; align-items: center; gap: .4rem;
+  z-index: 100; transition: background var(--transition), opacity var(--transition);
+  font-family: var(--font);
+}
+.pdf-export-btn:hover { background: #a8651f; }
+.pdf-export-btn:disabled { opacity: .55; cursor: wait; }
+
+/* ── PDF capture: hide all UI chrome before html2canvas snapshot ── */
+.pdf-capturing .edit-toggle,
+.pdf-capturing .pdf-export-btn,
+.pdf-capturing .section-toggle,
+.pdf-capturing .edit-only,
+.pdf-capturing .toast { display: none !important; }
 
 /* ─────────────────────────────────────────────────────────────
    MODAL
@@ -324,3 +361,22 @@ input, textarea { font-family: inherit; }
    SECTION SPACING
 ───────────────────────────────────────────────────────────── */
 section + section { border-top: 1px solid var(--clr-border); }
+
+/* ─────────────────────────────────────────────────────────────
+   PDF LOADING OVERLAY
+───────────────────────────────────────────────────────────── */
+.pdf-overlay {
+  position: fixed; inset: 0;
+  background: rgba(26,16,8,.72);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: .75rem; z-index: 9999;
+  color: #fff; font-size: .95rem; font-family: var(--font);
+}
+.pdf-overlay-spinner {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.25);
+  border-top-color: var(--clr-caramel);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

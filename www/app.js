@@ -17,35 +17,20 @@ const isNative = () =>
   window.Capacitor.isNativePlatform &&
   window.Capacitor.isNativePlatform();
 
-// ─── Capacitor Filesystem (lazy import so desktop fallback still works) ─────
-let CapFilesystem = null;
-let CapDirectory  = null;
+// ─── Capacitor plugin accessors ──────────────────────────────────────────────
+// Capacitor registers all installed plugins on window.Capacitor.Plugins at
+// runtime — no dynamic import paths needed (and those paths don't exist inside
+// the APK assets bundle anyway).
 
-async function loadCapFilesystem() {
-  if (CapFilesystem) return true;
-  try {
-    const mod = await import('./node_modules/@capacitor/filesystem/dist/esm/index.js');
-    CapFilesystem = mod.Filesystem;
-    CapDirectory  = mod.Directory;
-    return true;
-  } catch {
-    return false;
-  }
+function getCapPlugin(name) {
+  return window?.Capacitor?.Plugins?.[name] ?? null;
 }
 
-// ─── Capacitor Share (lazy import) ───────────────────────────────────────────
-let CapShare = null;
-
-async function loadCapShare() {
-  if (CapShare) return true;
-  try {
-    const mod = await import('./node_modules/@capacitor/share/dist/esm/index.js');
-    CapShare = mod.Share;
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Directory enum values used by Filesystem
+const CapDirectory = {
+  Data:  'DATA',
+  Cache: 'CACHE',
+};
 
 // ─── IndexedDB fallback for browser ─────────────────────────────────────────
 const IDB_NAME    = 'roastery-images';
@@ -87,17 +72,17 @@ async function idbDelete(key) {
  *   Browser: stores Blob in IDB, returns object URL.
  */
 async function saveImage(key, file) {
-  if (isNative() && await loadCapFilesystem()) {
+  const Filesystem = getCapPlugin('Filesystem');
+  if (isNative() && Filesystem) {
     const base64 = await fileToBase64(file);
     const fileName = `${key}.jpg`;
-    await CapFilesystem.writeFile({
+    await Filesystem.writeFile({
       path: fileName,
       data: base64,
       directory: CapDirectory.Data,
     });
     localStorage.setItem(`img:${key}`, fileName);
-    // Read back to get a URI the <img> tag can use
-    const result = await CapFilesystem.getUri({ path: fileName, directory: CapDirectory.Data });
+    const result = await Filesystem.getUri({ path: fileName, directory: CapDirectory.Data });
     return window.Capacitor.convertFileSrc(result.uri);
   } else {
     await idbSave(key, file);
@@ -119,9 +104,10 @@ async function loadImage(key) {
     return URL.createObjectURL(blob);
   }
   // native path stored
-  if (isNative() && await loadCapFilesystem()) {
+  const Filesystem = getCapPlugin('Filesystem');
+  if (isNative() && Filesystem) {
     try {
-      const result = await CapFilesystem.getUri({ path: stored, directory: CapDirectory.Data });
+      const result = await Filesystem.getUri({ path: stored, directory: CapDirectory.Data });
       return window.Capacitor.convertFileSrc(result.uri);
     } catch { return null; }
   }
@@ -136,8 +122,11 @@ async function deleteImage(key) {
   if (!stored) return;
   if (stored.startsWith('idb:')) {
     await idbDelete(stored.slice(4));
-  } else if (isNative() && await loadCapFilesystem()) {
-    try { await CapFilesystem.deleteFile({ path: stored, directory: CapDirectory.Data }); } catch { /* ok */ }
+  } else {
+    const Filesystem = getCapPlugin('Filesystem');
+    if (isNative() && Filesystem) {
+      try { await Filesystem.deleteFile({ path: stored, directory: CapDirectory.Data }); } catch { /* ok */ }
+    }
   }
   localStorage.removeItem(`img:${key}`);
 }
@@ -421,8 +410,11 @@ async function exportPDF() {
     // Build a Blob from the PDF output
     const pdfBlob = pdf.output('blob');
 
-    // ── Native Android: write to cache dir, then share via Capacitor Share ──
-    if (isNative() && await loadCapFilesystem() && await loadCapShare()) {
+    // ── Native Android: write to cache dir, then share via Capacitor plugins ──
+    const Filesystem = getCapPlugin('Filesystem');
+    const Share      = getCapPlugin('Share');
+
+    if (isNative() && Filesystem && Share) {
       // Convert blob → base64
       const base64 = await new Promise((res, rej) => {
         const reader = new FileReader();
@@ -432,18 +424,18 @@ async function exportPDF() {
       });
 
       // Write to Cache directory (readable by other apps via FileProvider)
-      await CapFilesystem.writeFile({
+      await Filesystem.writeFile({
         path: fileName,
         data: base64,
         directory: CapDirectory.Cache,
       });
-      const { uri } = await CapFilesystem.getUri({
+      const { uri } = await Filesystem.getUri({
         path: fileName,
         directory: CapDirectory.Cache,
       });
 
       // Open Android share sheet with the file URI
-      await CapShare.share({
+      await Share.share({
         title: fileName,
         url: uri,
         dialogTitle: 'Share PDF via…',

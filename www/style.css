@@ -284,24 +284,28 @@ input, textarea { font-family: inherit; }
 }
 
 /* ─────────────────────────────────────────────────────────────
-   PDF EXPORT FAB
+   EXPORT FAB GROUP (PDF + Image buttons)
 ───────────────────────────────────────────────────────────── */
-.pdf-export-btn {
-  position: fixed; bottom: 1.5rem; left: 1.5rem;
-  height: 44px; padding: 0 1.1rem; border-radius: 100px;
-  background: var(--clr-caramel); color: #fff;
-  border: none; font-size: .88rem; font-weight: 700;
-  box-shadow: 0 4px 14px rgba(0,0,0,.28);
-  display: flex; align-items: center; gap: .4rem;
-  z-index: 100; transition: background var(--transition), opacity var(--transition);
-  font-family: var(--font);
+.export-fab-group {
+  position: fixed; bottom: 1.5rem; left: 1rem;
+  display: flex; gap: .5rem;
+  z-index: 100;
 }
-.pdf-export-btn:hover { background: #a8651f; }
-.pdf-export-btn:disabled { opacity: .55; cursor: wait; }
+.export-fab {
+  height: 44px; padding: 0 1rem; border-radius: 100px;
+  background: var(--clr-caramel); color: #fff;
+  border: none; font-size: .85rem; font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28);
+  display: flex; align-items: center; gap: .35rem;
+  transition: background var(--transition), opacity var(--transition);
+  font-family: var(--font); cursor: pointer;
+}
+.export-fab:hover    { background: #a8651f; }
+.export-fab:disabled { opacity: .5; cursor: wait; }
 
-/* ── PDF capture: hide all UI chrome before html2canvas snapshot ── */
+/* ── Capture mode: hide all UI chrome before html2canvas snapshot ── */
 .pdf-capturing .edit-toggle,
-.pdf-capturing .pdf-export-btn,
+.pdf-capturing .export-fab-group,
 .pdf-capturing .section-toggle,
 .pdf-capturing .edit-only,
 .pdf-capturing .toast { display: none !important; }

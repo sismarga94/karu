@@ -292,26 +292,19 @@ function saveSectionVisibility(map) {
   localStorage.setItem(SECTION_VISIBILITY_KEY, JSON.stringify(map));
 }
 
-/**
- * Each toggle button carries data-target="<section-id>".
- * Hiding collapses everything inside the section EXCEPT the header row,
- * so the toggle button itself stays reachable.
- */
 function applySectionVisibility(sectionId, visible) {
   const section = document.getElementById(sectionId);
   if (!section) return;
-  // Hide every direct child that is NOT the header row
   Array.from(section.children).forEach(child => {
     const isHeader = child.classList.contains('catalog-header') ||
                      child.classList.contains('gallery-header');
     if (!isHeader) child.classList.toggle('section-body-hidden', !visible);
   });
-  // Update the toggle button appearance
   const btn = section.querySelector('.section-toggle');
   if (btn) {
     btn.classList.toggle('is-hidden', !visible);
     btn.title = visible ? `Hide ${btn.dataset.label || 'section'}` : `Show ${btn.dataset.label || 'section'}`;
-    btn.textContent = visible ? '👁' : '👁‍🗨';
+    btn.textContent = visible ? '👁' : '👁\u200d🗨';
   }
 }
 
@@ -322,13 +315,12 @@ function initSectionToggles() {
     const label    = document.getElementById(targetId)?.querySelector('h2')?.textContent || targetId;
     btn.dataset.label = label;
 
-    // Restore persisted state (default = visible)
     const isVisible = visibility[targetId] !== false;
     applySectionVisibility(targetId, isVisible);
 
     btn.addEventListener('click', () => {
       const map = getSectionVisibility();
-      const nowVisible = map[targetId] === false; // toggling: was hidden → now show
+      const nowVisible = map[targetId] === false;
       map[targetId] = nowVisible;
       saveSectionVisibility(map);
       applySectionVisibility(targetId, nowVisible);
@@ -336,140 +328,154 @@ function initSectionToggles() {
   });
 }
 
-// ─── PDF Export ──────────────────────────────────────────────────────────────
+// ─── Shared capture helpers ──────────────────────────────────────────────────
+
+function makeOverlay(label) {
+  const el = document.createElement('div');
+  el.className = 'pdf-overlay';
+  el.innerHTML = `<div class="pdf-overlay-spinner"></div><span>${label}</span>`;
+  return el;
+}
+
+/**
+ * Hides UI chrome, unhides hidden sections, waits for repaint,
+ * then runs html2canvas and returns the canvas.
+ * The overlay is passed in so it can be excluded from capture.
+ */
+async function captureCanvas(overlay) {
+  document.body.classList.add('pdf-capturing');
+
+  // Temporarily reveal hidden sections so they appear in the output
+  document.querySelectorAll('.section-body-hidden')
+    .forEach(el => el.classList.remove('section-body-hidden'));
+
+  // Let CSS settle before the snapshot
+  await new Promise(r => setTimeout(r, 150));
+
+  // Mount overlay AFTER the repaint — it won't be in the captured pixels
+  document.body.appendChild(overlay);
+
+  return html2canvas(document.body, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#faf7f2',
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: 390,                     // consistent phone-width output
+    windowHeight: document.body.scrollHeight,
+    ignoreElements: el => el === overlay, // skip overlay node
+  });
+}
+
+/** Re-applies hidden state to sections that were collapsed before capture */
+function restoreHiddenSections() {
+  const map = getSectionVisibility();
+  document.querySelectorAll('.section-toggle').forEach(btn => {
+    const id = btn.dataset.target;
+    if (map[id] === false) applySectionVisibility(id, false);
+  });
+}
+
+/** Share a file natively on Android, or trigger a browser download */
+async function shareOrDownload(blob, fileName, dialogTitle) {
+  const Filesystem = getCapPlugin('Filesystem');
+  const Share      = getCapPlugin('Share');
+
+  if (isNative() && Filesystem && Share) {
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+    await Filesystem.writeFile({ path: fileName, data: base64, directory: CapDirectory.Cache });
+    const { uri } = await Filesystem.getUri({ path: fileName, directory: CapDirectory.Cache });
+    await Share.share({ title: fileName, url: uri, dialogTitle });
+    showToast('Share sheet opened');
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    showToast(`${fileName.endsWith('.pdf') ? 'PDF' : 'Image'} downloaded`);
+  }
+}
+
+function getExportName() {
+  return (localStorage.getItem('roasteryName') || 'Roastery-Profile')
+    .replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+}
+
+// ─── Export as PDF ────────────────────────────────────────────────────────────
+// Single-page PDF sized exactly to content height — no cropping, ever.
 async function exportPDF() {
   const btn = document.getElementById('pdf-export-btn');
   btn.disabled = true;
-  btn.textContent = '⏳ Generating…';
-
-  // Hide UI chrome from the capture (FAB, toggles, etc.)
-  document.body.classList.add('pdf-capturing');
-
-  // Also temporarily show any hidden sections so they appear in the PDF
-  const hiddenBodies = document.querySelectorAll('.section-body-hidden');
-  hiddenBodies.forEach(el => el.classList.remove('section-body-hidden'));
-
-  // Wait for CSS repaint before snapshot
-  await new Promise(r => setTimeout(r, 120));
-
-  // Show loading overlay AFTER the repaint delay so html2canvas won't see it
-  const overlay = document.createElement('div');
-  overlay.className = 'pdf-overlay';
-  overlay.innerHTML = '<div class="pdf-overlay-spinner"></div><span>Generating PDF…</span>';
+  btn.textContent = '⏳ PDF…';
+  const overlay = makeOverlay('Generating PDF…');
 
   try {
+    const canvas = await captureCanvas(overlay);
     const { jsPDF } = window.jspdf;
 
-    // A4 dimensions in mm
-    const PDF_W = 210;
-    const PDF_H = 297;
-    const MARGIN = 10; // mm
+    // canvas pixels → mm (96 dpi base, html2canvas scale=2)
+    const PX_TO_MM  = 25.4 / 96 / 2;
+    const MARGIN_MM = 6;
+    const contentW  = canvas.width  * PX_TO_MM;
+    const contentH  = canvas.height * PX_TO_MM;
+    const pdfW      = contentW + MARGIN_MM * 2;
+    const pdfH      = contentH + MARGIN_MM * 2;
 
-    // Mount overlay now — after the snapshot target is already frozen in memory
-    document.body.appendChild(overlay);
+    // One page exactly as tall as the content — zero cropping
+    const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: 'portrait' });
+    pdf.addImage(
+      canvas.toDataURL('image/jpeg', 0.93), 'JPEG',
+      MARGIN_MM, MARGIN_MM,
+      contentW, contentH,
+      undefined, 'FAST'
+    );
 
-    const canvas = await html2canvas(document.body, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#faf7f2',
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: document.body.scrollWidth,
-      windowHeight: document.body.scrollHeight,
-      ignoreElements: el => el === overlay,   // belt-and-suspenders: skip overlay
-    });
-
-    const imgData   = canvas.toDataURL('image/jpeg', 0.92);
-    const imgW      = PDF_W - MARGIN * 2;          // usable width in mm
-    const imgH      = (canvas.height / canvas.width) * imgW; // proportional height
-
-    const pdf       = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    const pageUsable = PDF_H - MARGIN * 2;
-
-    let yOffset = 0;
-    while (yOffset < imgH) {
-      if (yOffset > 0) pdf.addPage();
-      pdf.addImage(
-        imgData, 'JPEG',
-        MARGIN,                          // x
-        MARGIN - yOffset,                // y (shifts up each page)
-        imgW, imgH,                      // width, full height
-        undefined, 'FAST'
-      );
-      // Clip the visible area with a white mask outside page bounds
-      // top mask
-      pdf.setFillColor(250, 247, 242);
-      pdf.rect(0, 0, PDF_W, MARGIN, 'F');
-      // bottom mask
-      pdf.rect(0, MARGIN + pageUsable, PDF_W, MARGIN, 'F');
-      yOffset += pageUsable;
-    }
-
-    const name = (localStorage.getItem('roasteryName') || 'Roastery-Profile')
-      .replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
-    const fileName = `${name}.pdf`;
-
-    // Build a Blob from the PDF output
-    const pdfBlob = pdf.output('blob');
-
-    // ── Native Android: write to cache dir, then share via Capacitor plugins ──
-    const Filesystem = getCapPlugin('Filesystem');
-    const Share      = getCapPlugin('Share');
-
-    if (isNative() && Filesystem && Share) {
-      // Convert blob → base64
-      const base64 = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload  = () => res(reader.result.split(',')[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(pdfBlob);
-      });
-
-      // Write to Cache directory (readable by other apps via FileProvider)
-      await Filesystem.writeFile({
-        path: fileName,
-        data: base64,
-        directory: CapDirectory.Cache,
-      });
-      const { uri } = await Filesystem.getUri({
-        path: fileName,
-        directory: CapDirectory.Cache,
-      });
-
-      // Open Android share sheet with the file URI
-      await Share.share({
-        title: fileName,
-        url: uri,
-        dialogTitle: 'Share PDF via…',
-      });
-      showToast('Share sheet opened');
-
-    } else {
-      // Desktop browser fallback: download the file directly
-      const url = URL.createObjectURL(pdfBlob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = fileName;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showToast('PDF downloaded');
-    }
+    await shareOrDownload(pdf.output('blob'), `${getExportName()}.pdf`, 'Share PDF via…');
   } catch (err) {
     showToast(`PDF failed: ${err.message}`);
     console.error(err);
   } finally {
-    // Restore hidden sections
-    const map = getSectionVisibility();
-    document.querySelectorAll('.section-toggle').forEach(btn => {
-      const targetId = btn.dataset.target;
-      if (map[targetId] === false) applySectionVisibility(targetId, false);
-    });
-
+    restoreHiddenSections();
     document.body.classList.remove('pdf-capturing');
     overlay.remove();
     btn.disabled = false;
     btn.textContent = '⬇ PDF';
+  }
+}
+
+// ─── Export as Image (PNG) ────────────────────────────────────────────────────
+// Single tall PNG — perfect for WhatsApp, Instagram Stories, saving to Photos.
+async function exportImage() {
+  const btn = document.getElementById('img-export-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Image…';
+  const overlay = makeOverlay('Generating Image…');
+
+  try {
+    const canvas = await captureCanvas(overlay);
+
+    const blob = await new Promise((res, rej) =>
+      canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png')
+    );
+
+    await shareOrDownload(blob, `${getExportName()}.png`, 'Share Image via…');
+  } catch (err) {
+    showToast(`Image failed: ${err.message}`);
+    console.error(err);
+  } finally {
+    restoreHiddenSections();
+    document.body.classList.remove('pdf-capturing');
+    overlay.remove();
+    btn.disabled = false;
+    btn.textContent = '🖼 Image';
   }
 }
 
@@ -482,6 +488,7 @@ async function init() {
 
   document.getElementById('edit-toggle').addEventListener('click', () => setEditMode(!editMode));
   document.getElementById('pdf-export-btn').addEventListener('click', exportPDF);
+  document.getElementById('img-export-btn').addEventListener('click', exportImage);
 
   // Prevent accidental navigation when editing text
   document.querySelectorAll('.editable').forEach(el => {

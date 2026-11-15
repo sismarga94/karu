@@ -33,6 +33,20 @@ async function loadCapFilesystem() {
   }
 }
 
+// ─── Capacitor Share (lazy import) ───────────────────────────────────────────
+let CapShare = null;
+
+async function loadCapShare() {
+  if (CapShare) return true;
+  try {
+    const mod = await import('./node_modules/@capacitor/share/dist/esm/index.js');
+    CapShare = mod.Share;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── IndexedDB fallback for browser ─────────────────────────────────────────
 const IDB_NAME    = 'roastery-images';
 const IDB_STORE   = 'blobs';
@@ -407,27 +421,44 @@ async function exportPDF() {
     // Build a Blob from the PDF output
     const pdfBlob = pdf.output('blob');
 
-    // ── Android / modern browser: Web Share API (opens native share sheet) ──
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-      await navigator.share({ files: [file], title: fileName });
+    // ── Native Android: write to cache dir, then share via Capacitor Share ──
+    if (isNative() && await loadCapFilesystem() && await loadCapShare()) {
+      // Convert blob → base64
+      const base64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = () => res(reader.result.split(',')[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      // Write to Cache directory (readable by other apps via FileProvider)
+      await CapFilesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: CapDirectory.Cache,
+      });
+      const { uri } = await CapFilesystem.getUri({
+        path: fileName,
+        directory: CapDirectory.Cache,
+      });
+
+      // Open Android share sheet with the file URI
+      await CapShare.share({
+        title: fileName,
+        url: uri,
+        dialogTitle: 'Share PDF via…',
+      });
       showToast('Share sheet opened');
-    } else if (navigator.share) {
-      // Share API exists but can't share files → share a blob URL as a link fallback
-      const url = URL.createObjectURL(pdfBlob);
-      await navigator.share({ title: fileName, url });
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showToast('Share sheet opened');
+
     } else {
-      // Desktop browser fallback: open PDF in a new tab so user can save/share
+      // Desktop browser fallback: download the file directly
       const url = URL.createObjectURL(pdfBlob);
       const a   = document.createElement('a');
-      a.href    = url;
-      a.target  = '_blank';
-      a.rel     = 'noopener';
+      a.href     = url;
+      a.download = fileName;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showToast('PDF opened in new tab');
+      showToast('PDF downloaded');
     }
   } catch (err) {
     showToast(`PDF failed: ${err.message}`);

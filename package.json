@@ -1,0 +1,19 @@
+{
+  "name": "karuroastery",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/filesystem": "^8.1.5"
+  }
+}

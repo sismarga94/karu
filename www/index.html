@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a1008" />
+  <title>Roastery Profile</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════ HERO ═══════════════════════════════ -->
+  <section class="hero" id="hero-section">
+    <div class="hero-img-wrap">
+      <img id="hero-img" src="assets/hero-placeholder.jpg" alt="Roastery hero" />
+      <label class="img-replace-btn edit-only hidden" for="hero-file-input" title="Replace hero image">📷</label>
+      <input type="file" id="hero-file-input" accept="image/*" class="hidden" />
+    </div>
+    <div class="hero-overlay">
+      <div class="logo-wrap">
+        <img id="logo-img" src="assets/logo-placeholder.png" alt="Roastery logo" />
+        <label class="img-replace-btn edit-only hidden" for="logo-file-input" title="Replace logo">📷</label>
+        <input type="file" id="logo-file-input" accept="image/*" class="hidden" />
+      </div>
+      <h1 id="roastery-name" class="editable" data-key="roasteryName">Karu Roastery</h1>
+      <p id="tagline" class="editable" data-key="tagline">Small-batch. Single-origin. Honestly roasted.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════ ABOUT ══════════════════════════════ -->
+  <section class="about" id="about-section">
+    <h2>Our Story</h2>
+    <p id="bio" class="editable" data-key="bio">
+      Born from a passion for traceability and craft, Karu Roastery sources
+      green beans directly from family farms across Indonesia, Ethiopia, and
+      Colombia. Every batch is roasted on a vintage Probat drum roaster to
+      unlock the full potential of each origin.
+    </p>
+  </section>
+
+  <!-- ═══════════════════════════════ INFO ═══════════════════════════════ -->
+  <section class="info-grid" id="info-section">
+    <div class="info-card">
+      <span class="info-icon">📍</span>
+      <div>
+        <h3>Location</h3>
+        <p id="location" class="editable" data-key="location">Jl. Senopati No. 12, Jakarta Selatan</p>
+      </div>
+    </div>
+    <div class="info-card">
+      <span class="info-icon">🕐</span>
+      <div>
+        <h3>Hours</h3>
+        <p id="hours" class="editable" data-key="hours">Mon–Sat 08:00 – 18:00</p>
+      </div>
+    </div>
+    <div class="info-card">
+      <span class="info-icon">📱</span>
+      <div>
+        <h3>Contact</h3>
+        <p id="contact" class="editable" data-key="contact">@karuroastery · hello@karuroastery.com</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════ CATALOG ═════════════════════════════ -->
+  <section class="catalog" id="catalog-section">
+    <div class="catalog-header">
+      <h2>Coffee Menu</h2>
+      <div class="catalog-actions">
+        <button id="sync-btn" class="btn btn-secondary edit-only hidden">⟳ Sync Menu</button>
+        <button id="sheets-config-btn" class="btn btn-ghost edit-only hidden">⚙ Sheet URL</button>
+      </div>
+    </div>
+    <div id="catalog-grid" class="catalog-grid">
+      <!-- Cards injected by sheets.js -->
+      <p class="empty-state">No coffee menu yet. In Edit Mode, tap "Sync Menu" to load from Google Sheets.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════ GALLERY ════════════════════════════ -->
+  <section class="gallery-section" id="gallery-section">
+    <div class="gallery-header">
+      <h2>Gallery</h2>
+      <label class="btn btn-secondary edit-only hidden" for="gallery-add-input">+ Add Photo</label>
+      <input type="file" id="gallery-add-input" accept="image/*" multiple class="hidden" />
+    </div>
+    <div id="gallery-grid" class="gallery-grid">
+      <!-- Items injected by app.js -->
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════ EDIT TOGGLE ═══════════════════════════ -->
+  <button id="edit-toggle" class="edit-toggle" title="Toggle Edit Mode">✏</button>
+
+  <!-- ══════════════════════════ SHEETS CONFIG MODAL ════════════════════ -->
+  <div id="sheets-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Google Sheets configuration">
+    <div class="modal-box">
+      <h3>Connect Google Sheets</h3>
+      <p class="modal-hint">
+        In Google Sheets: <strong>File → Share → Publish to web</strong>, choose <em>CSV</em> format for the bean sheet, then paste the URL below.
+      </p>
+      <label for="sheets-url-input">Published CSV URL</label>
+      <input type="url" id="sheets-url-input" placeholder="https://docs.google.com/spreadsheets/d/…/pub?output=csv" />
+      <div class="modal-actions">
+        <button id="sheets-save-btn" class="btn btn-primary">Save &amp; Sync</button>
+        <button id="sheets-cancel-btn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+
+  <!-- ═══════════════════════════════ TOAST ════════════════════════════ -->
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@capacitor/core@latest/dist/capacitor.js"></script>
+  <script type="module" src="app.js"></script>
+  <script type="module" src="sheets.js"></script>
+</body>
+</html>

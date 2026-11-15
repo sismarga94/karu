@@ -402,8 +402,33 @@ async function exportPDF() {
 
     const name = (localStorage.getItem('roasteryName') || 'Roastery-Profile')
       .replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
-    pdf.save(`${name}.pdf`);
-    showToast('PDF saved!');
+    const fileName = `${name}.pdf`;
+
+    // Build a Blob from the PDF output
+    const pdfBlob = pdf.output('blob');
+
+    // ── Android / modern browser: Web Share API (opens native share sheet) ──
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      await navigator.share({ files: [file], title: fileName });
+      showToast('Share sheet opened');
+    } else if (navigator.share) {
+      // Share API exists but can't share files → share a blob URL as a link fallback
+      const url = URL.createObjectURL(pdfBlob);
+      await navigator.share({ title: fileName, url });
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      showToast('Share sheet opened');
+    } else {
+      // Desktop browser fallback: open PDF in a new tab so user can save/share
+      const url = URL.createObjectURL(pdfBlob);
+      const a   = document.createElement('a');
+      a.href    = url;
+      a.target  = '_blank';
+      a.rel     = 'noopener';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      showToast('PDF opened in new tab');
+    }
   } catch (err) {
     showToast(`PDF failed: ${err.message}`);
     console.error(err);
